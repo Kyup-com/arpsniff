@@ -1,0 +1,4 @@
+- Fix the messages to go to a log file.
+- Add debug option.
+- The daemon should for once per interface.
+- The daemon should recheck the currenly existing interfaces. Maybe a netlink listener interface should be nice.
