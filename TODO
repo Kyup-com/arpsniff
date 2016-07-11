@@ -2,3 +2,4 @@
 - Add debug option.
 - The daemon should for once per interface.
 - The daemon should recheck the currenly existing interfaces. Maybe a netlink listener interface should be nice.
+- Add perp management script
