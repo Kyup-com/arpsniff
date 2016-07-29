@@ -43,6 +43,26 @@ sub perp_add {
 	my $ct_if = $_[0];
 	my $perp_loc = $_[1];
 	my $perpif_dir = $perp_dir."arpsniff-".$ct_if;
+	my $arpsniff_dir = "$perp_dir/arpsniff";
+	if ( ! -d $arpsniff_dir ) {
+		mkdir $arpsniff_dir;
+
+		open my $servconf, '>', "$arpsniff_dir/rc.main";
+		print $servconf "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n exec /usr/local/bin/arpsniff\n\n   }\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0";
+		chmod (0755, "$arpsniff_dir/rc.main");
+		close $servconf;
+
+		open my $main_servconf, '>', "$main_service";
+		print $main_servconf "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n	exec /usr/local/bin/arpsniff \$DEV \$DEV2\n\n	}\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0";
+		chmod (0755, $main_servconf);
+		close $main_servconf;
+
+		open my $rc_log, '>', "$arpsniff_dir/rc.log";
+		print $rc_log "#!/bin/sh\n\n. /etc/perp/.boot/rc.log-template\n";
+		chmod (0755, $rc_log);
+		close $rc_log;
+	}
+
 	mkdir $perpif_dir if ( ! -d $perpif_dir );
 	my $perp_conf = "${perpif_dir}/conf.sh";
 
@@ -106,6 +126,7 @@ if (not defined($ARGV[0]) or not defined($ARGV[1])) {
 	run_without_params;
 	perp_remove;
 }
+
 my $mac = Net::ARP::get_mac($ARGV[0]) if ($ARGV[0]);
 
 if ($ARGV[0] && $ARGV[1]){
