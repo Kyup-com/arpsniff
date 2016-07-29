@@ -13,8 +13,9 @@ my $listen_dev;
 my @interfaces;
 my $perp_dir = '/etc/perp/';
 my $default_if = `ip r l | awk '/default/ {print \$5}'`;
+my $rc_main = '/etc/perp/arpsniff/rc.main';
 my $main_service = '/etc/perp/arpsniff/rc.main-service';
-my $rc_log = 'etc/perp/.boot/rc.log-template';
+my $rc_log = '/etc/perp/arpsniff/rc.log';
 
 $out_dev = $ARGV[0] if ($ARGV[0]);
 $listen_dev = $ARGV[1] if ($ARGV[1]);
@@ -38,6 +39,15 @@ sub verify_iface {
 	return 0;
 }
 
+sub write_newfile {
+	my $filename = $_[0];
+	my $content = $_[1];
+	open my $tmpcont, '>', "$filename";
+	print $tmpcont $content;
+	chmod (0755, "$filename");
+	close $tmpcont;
+}
+
 # adding perp directory with required files to run each running container interface.
 sub perp_add {
 	my $ct_if = $_[0];
@@ -46,21 +56,9 @@ sub perp_add {
 	my $arpsniff_dir = "$perp_dir/arpsniff";
 	if ( ! -d $arpsniff_dir ) {
 		mkdir $arpsniff_dir;
-
-		open my $servconf, '>', "$arpsniff_dir/rc.main";
-		print $servconf "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n exec /usr/local/bin/arpsniff\n\n   }\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0";
-		chmod (0755, "$arpsniff_dir/rc.main");
-		close $servconf;
-
-		open my $main_servconf, '>', "$main_service";
-		print $main_servconf "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n	exec /usr/local/bin/arpsniff \$DEV \$DEV2\n\n	}\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0";
-		chmod (0755, $main_servconf);
-		close $main_servconf;
-
-		open my $rc_log, '>', "$arpsniff_dir/rc.log";
-		print $rc_log "#!/bin/sh\n\n. /etc/perp/.boot/rc.log-template\n";
-		chmod (0755, $rc_log);
-		close $rc_log;
+		write_newfile($rc_main,"#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n exec /usr/local/bin/arpsniff\n\n   }\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0");
+		write_newfile($main_service, "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\nexec /usr/local/bin/arpsniff \$DEV \$DEV2\n\n}\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0");
+		write_newfile($rc_log, "#!/bin/sh\n\n. /etc/perp/.boot/rc.log-template\n");
 	}
 
 	mkdir $perpif_dir if ( ! -d $perpif_dir );
@@ -173,5 +171,3 @@ sub process_packet {
                         'reply');				# ARP operation
 	}
 }
-
-
