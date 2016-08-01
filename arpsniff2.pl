@@ -6,12 +6,14 @@ use Net::ARP;
 use Net::Interface;
 use Data::Dumper;
 
-my $VERSION = "1.1";
+my $VERSION = "2.0";
+my $pid;
 my $errbuf;
 my $out_dev;
 my $listen_dev;
+my %running_ifs;
 my @interfaces;
-my $perp_dir = '/etc/perp/';
+my $perp_dir = '/etc/perp/arpsniff';
 my $default_if = `ip r l | awk '/default/ {print \$5}'`;
 my $rc_main = '/etc/perp/arpsniff/rc.main';
 my $main_service = '/etc/perp/arpsniff/rc.main-service';
@@ -22,7 +24,9 @@ $listen_dev = $ARGV[1] if ($ARGV[1]);
 
 
 $SIG{"HUP"} = \&sigHup;
+$SIG{CHLD} = 'IGNORE';
 
+# Collecting all interfaces in array
 sub get_interfaces {
 	my @result;
 	my @all_ifs = Net::Interface->interfaces();
@@ -48,109 +52,98 @@ sub write_newfile {
 	close $tmpcont;
 }
 
-# adding perp directory with required files to run each running container interface.
-sub perp_add {
+sub should_start {
 	my $ct_if = $_[0];
-	my $perp_loc = $_[1];
-	my $perpif_dir = $perp_dir."arpsniff-".$ct_if;
-	my $arpsniff_dir = "$perp_dir/arpsniff";
-	if ( ! -d $arpsniff_dir ) {
-		mkdir $arpsniff_dir;
-		write_newfile($rc_main,"#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\n exec /usr/local/bin/arpsniff\n\n   }\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0");
-		write_newfile($main_service, "#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\n. ./conf.sh\n\nstart() {\n\nexec /usr/local/bin/arpsniff \$DEV \$DEV2\n\n}\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0");
-		write_newfile($rc_log, "#!/bin/sh\n\n. /etc/perp/.boot/rc.log-template\n");
-	}
-
-	mkdir $perpif_dir if ( ! -d $perpif_dir );
-	my $perp_conf = "${perpif_dir}/conf.sh";
-
-	if ( ! -f $perp_conf ) {
-			open my $conf, '>', "$perp_conf";
-			print $conf "DEV=${default_if}DEV2=${ct_if}\n";
-			close $conf;
-	}
-	if ( ! -f "$perpif_dir/rc.main" ) {
-		symlink("$main_service", "$perpif_dir/rc.main");
-	}
-	if ( ! -f "$perpif_dir/rc.log" ) {
-		symlink("/etc/perp/.boot/rc.log-template", "$perpif_dir/rc.log");
-	}
-	if ( -f "/usr/bin/pstart" ) {
-		system("/usr/bin/pstart arpsniff-$ct_if");
-	}
+	my $result = 0;
+	$result = $running_ifs{$ct_if} if($running_ifs{$ct_if});
+	return $result;
 }
 
-# removing perp files and directories for non-running containers.
-sub perp_remove {
-	my @perp_ifs;
-	my @perplist = grep { -d } glob ( "${perp_dir}*" );
-	for my $perpapp (@perplist) {
-		if ( $perpapp =~ /^\/etc\/perp\/arpsniff-veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/ ) {
-			my @perp_app = split /arpsniff-/, $perpapp;
-			push @perp_ifs, $perp_app[1];
-		}
+# Spawning child process for each container interface
+sub start_child {
+    my $ct_if = $_[0];
+	my $out_if = $default_if;
+	$out_if =~ s/[\n\r]//g;
+	next if $pid = fork;
+	$running_ifs{$ct_if} = $pid;
+	die "fork failed: $!" unless defined $pid;
+	exec("$0 $out_if $ct_if");
+	exit;
+}
+
+sub reload_childs {
+	my $ct_if = $_[0];
+	my $out_if = $default_if;
+	$out_if =~ s/[\n\r]//g;
+	$child_exist = kill 0, $running_ifs{$ct_if};
+	if (!$child_exist) {
+		next if ($pid = fork);
+		$running_ifs{$ct_if} = $pid;
+		die "fork failed: $!" unless defined $pid;
+		exec("$0 $out_if $ct_if");
+		exit;
 	}
-	my %up_ifs = map { $_ => 1 } @interfaces;
-	for my $ct_if (@perp_ifs) {
-		if(verify_iface($ct_if) && exists($up_ifs{$ct_if})) {
-			next;
-		}
-		system("/usr/bin/pstop arpsniff-${ct_if}");
-		my $perpif_dir = $perp_dir."arpsniff-".$ct_if;
-		unlink $perpif_dir."/rc.log";
-		unlink $perpif_dir."/rc.main";
-		unlink $perpif_dir."/conf.sh";
-		rmdir $perpif_dir;
-	}	
+	
+}
+
+# Adding perp directory with required files to run each running container interface.
+sub perp_add {
+		mkdir $perp_dir;
+		write_newfile($rc_main,"#!/bin/sh\n\n. /etc/perp/.boot/service_lib.sh\n\nstart() {\n\n exec /usr/local/bin/arpsniff\n\n   }\n\neval \"\$TARGET\" \"\$@\"\n\nexit 0");
+		write_newfile($rc_log, "#!/bin/sh\n\n. /etc/perp/.boot/rc.log-template\n");
+		system("/usr/bin/pstart arpsniff") if (-f "/usr/bin/pstart");
+		exit;
 }
 
 sub run_without_params {
+	my $runtime = $_[0];
 	@interfaces = get_interfaces;
 	for my $vif (@interfaces) {
-		if (verify_iface($vif)) {
-				perp_add($vif, $perp_dir);
+		if (verify_iface($vif) && !$runtime) {
+			start_child($vif);
+		}
+		if (verify_iface($vif) && $runtime) {
+			reload_childs($vif);
 			}
-
 	}
 }
 
 sub sigHup {
-    @interfaces = get_interfaces;
-
+	run_without_params(1);
 }
 
 
 if (not defined($ARGV[0]) or not defined($ARGV[1])) {
+	perp_add if ( ! -d $perp_dir);
 	run_without_params;
-	perp_remove;
+	while(1) {
+		sleep(1);
+	}
 }
 
-my $mac = Net::ARP::get_mac($ARGV[0]) if ($ARGV[0]);
+sub arpsniff_instance {
+    $out_dev = $_[0];
+    $listen_dev = $_[1];
+    my $device = $listen_dev;
+    # open device
+    my $handle = Net::Pcap::open_live($device, 2000, 1, 0, \$errbuf);
+    die "Unable to open ",$device, " - ", $errbuf if (!defined $handle);
 
-if ($ARGV[0] && $ARGV[1]){
+    # find netmask so we can set a filter on the interface
+    Net::Pcap::lookupnet(\$device, \my $netp, \my $maskp, \$errbuf) || die "Can't find network info";
 
-	perp_remove;
-	$out_dev = $ARGV[0];
-	$listen_dev = $ARGV[1];
-	my $device = $listen_dev;
-	# open device
-	my $handle = Net::Pcap::open_live($device, 2000, 1, 0, \$errbuf);
-	die "Unable to open ",$device, " - ", $errbuf if (!defined $handle);
+    # set filter on interface
+    my $filter = "arp";
+    Net::Pcap::compile($handle,\$fp, $filter, 0, $maskp) && die "Unable to compile BPF";
+    Net::Pcap::setfilter($handle, $fp) && die "Unable to set filter";
 
-	# find netmask so we can set a filter on the interface
-	Net::Pcap::lookupnet(\$device, \my $netp, \my $maskp, \$errbuf) || die "Can't find network info"; 
-	
-	# set filter on interface
-	my $filter = "arp";
-	Net::Pcap::compile($handle,\$fp, $filter, 0, $maskp) && die "Unable to compile BPF";
-	Net::Pcap::setfilter($handle, $fp) && die "Unable to set filter";
+    # start sniffing
+    Net::Pcap::loop($handle, -1, \&process_packet, '') || die "Unable to start sniffing";
 
-	# start sniffing
-	Net::Pcap::loop($handle, -1, \&process_packet, '') || die "Unable to start sniffing";
-
-	# close
-	Net::Pcap::close($handle);
+    # close
+    Net::Pcap::close($handle);
 }
+
 
 sub process_packet {
 	my ($user, $header, $packet) = @_;
@@ -171,3 +164,8 @@ sub process_packet {
                         'reply');				# ARP operation
 	}
 }
+
+my $mac = Net::ARP::get_mac($out_dev) if ($out_dev);
+
+arpsniff_instance($out_dev, $listen_dev) if ($out_dev && $listen_dev);
+
