@@ -94,6 +94,7 @@ sub sigHup {
 sub sigChld {
     while (waitpid(-1,WNOHANG)>0 ) {
         logger("The $pid child has been killed!");
+	
     }
 }
 
@@ -138,18 +139,17 @@ sub arpsniff_instance {
     Net::Pcap::close($handle);
 }
 
+my $mac = Net::ARP::get_mac($out_dev) if ($out_dev);
 
 sub process_packet {
 	my ($user, $header, $packet) = @_;
 	my $eth_data = NetPacket::Ethernet::strip($packet);
 	my $arp = NetPacket::ARP->decode($eth_data);
-
 	# convert hex number to IP dotted - from rob_au at perlmonks
 	my $spa = join '.', map { hex } ($arp->{'spa'} =~ /([[:xdigit:]]{2})/g);
 	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
-
 	if ($spa eq $tpa) {
-		logger("Source: ",$spa,"( $mac)\tDestination: ",$tpa, "(ff:ff:ff:ff:ff:ff)\n");
+		logger("Source: $spa ($mac)\tDestination: $tpa (ff:ff:ff:ff:ff:ff)\n");
 		Net::ARP::send_packet($out_dev,			# Device
                         $tpa,					# Source IP
                         $tpa,					# Destination IP
@@ -159,6 +159,5 @@ sub process_packet {
 	}
 }
 
-my $mac = Net::ARP::get_mac($out_dev) if ($out_dev);
 
 arpsniff_instance($out_dev, $listen_dev) if ($out_dev && $listen_dev);
