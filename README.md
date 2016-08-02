@@ -6,4 +6,4 @@ This project has tools that are useful for proxy_arp setup.
 
 INSTALL
 
- yum install -y libpcap-devel && for i in Net::Pcap NetPacket::Ethernet NetPacket::ARP Net::ARP Net::Interface; do cpan -f $i; done
+ yum install -y libpcap-devel && for i in Net::Pcap NetPacket::Ethernet NetPacket::ARP Net::ARP; do cpan -f $i; done
