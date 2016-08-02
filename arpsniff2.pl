@@ -25,7 +25,7 @@ $listen_dev = $ARGV[1] if ($ARGV[1]);
 
 $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
-#$SIG{"TERM"} = \&sigTerm;
+$SIG{"TERM"} = \&sigTerm;
 
 open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 # make the output to LOG and to STDOUT unbuffered
@@ -78,8 +78,8 @@ sub perp_add {
 		exit;
 }
 
+
 sub run_without_params {
-	logger("Reloading interfaces...");
 	@interfaces = `awk '/veth/ {gsub(":",""); print \$1}' /proc/net/dev`;
 	for my $vif (@interfaces) {
 		start_child($vif) if (verify_iface($vif));
@@ -93,9 +93,19 @@ sub sigHup {
 
 sub sigChld {
     while (waitpid(-1,WNOHANG)>0 ) {
-        logger("The $pid child has been killed!");
-	
+		my %rhash = reverse %running_ifs;
+		my $veth = $rhash{$pid};
+		$veth  =~ s/[\n\r]//g;
+		logger("$veth child ($pid) has been stopped.");
+		run_without_params;
     }
+}
+
+sub sigTerm {
+		my $veth =~ s/[\n\r]//g;
+		foreach(keys %running_ifs) {
+			kill 9, $running_ifs{$_};
+		}
 }
 
 if (not defined($ARGV[0]) or not defined($ARGV[1])) {
@@ -103,8 +113,8 @@ if (not defined($ARGV[0]) or not defined($ARGV[1])) {
 	run_without_params;
 	while(1) {
 		my $res = waitpid($pid, WNOHANG);
-    	sleep(1);
- 
+		sleep(10);
+		run_without_params;
 		if ($res == -1) {
 			logger("Some error occurred"), $? >> 8;
 			exit();
