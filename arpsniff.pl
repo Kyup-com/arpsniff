@@ -55,7 +55,6 @@ sub start_child {
 	next if ($running_ifs{$ct_if});
 	$pid = fork;
 
-	#die "fork failed: $!" unless defined $pid;
 	if (defined($pid) && $pid > 0) {
 		$running_ifs{$ct_if} = $pid;
 		return;
