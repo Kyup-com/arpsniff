@@ -3,105 +3,151 @@ use Net::Pcap;
 use NetPacket::Ethernet;
 use NetPacket::ARP;
 use Net::ARP;
+use POSIX qw(strftime :sys_wait_h);
+use Data::Dumper;
 
-my $VERSION = "1.0";
+my $VERSION = "1.1";
+my $pid;
 my $errbuf;
 my $out_dev;
 my $listen_dev;
-my $pid_dir = "/var/run/arpsniff";
+my %running_ifs;
+my @interfaces;
+my $perp_dir = '/etc/perp/arpsniff';
+my $rc_main = '/etc/perp/arpsniff/rc.main';
+my $rc_log = '/etc/perp/arpsniff/rc.log';
+my $logfile = '/var/log/arpsniff.log';
+our $default_if = `ip r l | awk '/default/ {print \$5}'`;
+
+
+sub sigHup {
+	logger("SIGHUP received");
+	run_without_params;
+}
+
+sub sigChld {
+	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
+		my %rhash = reverse %running_ifs;
+		my $veth = $rhash{$pid};
+		delete $running_ifs{$veth};
+		logger("$veth child ($pid) has been stopped.");
+		run_without_params;
+	}
+}
+
+sub sigTerm {
+	my $veth =~ s/[\n\r]//g;
+	foreach(keys %running_ifs) {
+		kill 9, $running_ifs{$_};
+	}
+}
+
+sub logger {
+	print CLOG strftime('%b %d %H:%M:%S', localtime(time)) . ' Arpsniff - ' . $_[0] . "\n";
+}
 
 sub verify_iface {
-	return 1 if ($_[0] =~ /^v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
-	return 0;
+	if ($_[0] =~ /^veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/) {
+		return 1;
+	} else {
+		return 0;
+	}
 }
+
+# Spawning child process for each container interface
+sub start_child {
+	my $ct_if = $_[0];
+	my $out_if = $default_if;
+	$out_if =~ s/[\n\r]+//g;
+	$ct_if =~ s/[\n\r]+//g;
+	next if ($running_ifs{$ct_if});
+	$pid = fork;
+
+	#die "fork failed: $!" unless defined $pid;
+	if ($pid && $pid > 0) {
+		$running_ifs{$ct_if} = $pid;
+		return;
+	}
+	exec("$0 $out_if $ct_if");
+	exit;
+}
+
+sub run_without_params {
+	@interfaces = `awk '/veth/ {gsub(":",""); print \$1}' /proc/net/dev`;
+	for my $vif (@interfaces) {
+		start_child($vif) if (verify_iface($vif));
+	}
+}
+
+sub arpsniff_instance {
+	my $device = $_[0];
+	# open device
+	my $handle = Net::Pcap::open_live($device, 2000, 1, 0, \$errbuf);
+
+	die "Unable to open ",$device, " - ", $errbuf if (!defined $handle);
+
+	# find netmask so we can set a filter on the interface
+	Net::Pcap::lookupnet(\$device, \my $netp, \my $maskp, \$errbuf) || die "Can't find network info";
+
+	# set filter on interface
+	Net::Pcap::compile($handle,\$fp, 'arp', 0, $maskp) && die "Unable to compile BPF";
+	Net::Pcap::setfilter($handle, $fp) && die "Unable to set filter";
+
+	# start sniffing
+	Net::Pcap::loop($handle, -1, \&process_packet, '') || die "Unable to start sniffing";
+
+	# close
+	Net::Pcap::close($handle);
+}
+
+sub process_packet {
+	my $mac = Net::ARP::get_mac($out_dev);
+	my ($user, $header, $packet) = @_;
+	my $eth_data = NetPacket::Ethernet::strip($packet);
+	my $arp = NetPacket::ARP->decode($eth_data);
+	# convert hex number to IP dotted - from rob_au at perlmonks
+	my $spa = join '.', map { hex } ($arp->{'spa'} =~ /([[:xdigit:]]{2})/g);
+	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
+	if ($spa eq $tpa) {
+		logger("Source: $spa ($mac)\tDestination: $tpa (ff:ff:ff:ff:ff:ff)");
+		Net::ARP::send_packet($out_dev,			# Device
+			$tpa,					# Source IP
+			$tpa,					# Destination IP
+			$mac,					# Source MAC
+			'ff:ff:ff:ff:ff:ff',	# Destinaton MAC
+			'reply');				# ARP operation
+	}
+}
+
+$out_dev = $ARGV[0] if ($ARGV[0]);
+$listen_dev = $ARGV[1] if ($ARGV[1]);
+
+$SIG{"HUP"} = \&sigHup;
+$SIG{"CHLD"} = \&sigChld;
+$SIG{"TERM"} = \&sigTerm;
+
+open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
+# make the output to LOG and to STDOUT unbuffered
+# this has to be done after the fork and after detaching from the command terminal
+$|=1;
+select((select(CLOG), $| = 1)[0]);
+
 
 if (not defined($ARGV[0]) or not defined($ARGV[1])) {
-	print "Usage: $0 outgoing_interface listening_interface\n";
-	exit 1;
-}
-
-if (!verify_iface($ARGV[0])) {
-	print "Error: invalid outgoing_interface\n";
-	exit 1;
-}
-if (!verify_iface($ARGV[1])) {
-	print "Error: invalid listening_interface\n";
-	exit 1;
-}
-
-$out_dev = $ARGV[0];
-$listen_dev = $ARGV[1];
-
-my $mac = Net::ARP::get_mac($out_dev);
-
-$device = $listen_dev;
-# open device
-$handle = Net::Pcap::open_live($device, 2000, 1, 0, \$errbuf);
-die "Unable to open ",$device, " - ", $errbuf if (!defined $handle);
-
-# find netmask so we can set a filter on the interface
-Net::Pcap::lookupnet(\$device, \$netp, \$maskp, \$errbuf) || die "Can't find network info"; 
-
-# set filter on interface
-$filter = "arp";
-Net::Pcap::compile($handle, \$fp, $filter, 0, $maskp) && die "Unable to compile BPF";
-Net::Pcap::setfilter($handle, $fp) && die "Unable to set filter";
-
-
-mkdir $pid_dir if ( ! -d $pid_dir );
-if ( -f "$pid_dir/$listen_dev" ) {
-	open my $pid, '<', "$pid_dir/$listen_dev";
-	my $old_pid = <$pid>;
-	close $pid;
-	if ( -d "/proc/$old_pid" ) {
-		open my $old_cmd, '<', "/proc/$old_pid/cmdline";
-		my $cmdline = <$old_cmd>;
-		close $old_cmd;
-		if ($cmdline =~ /arpsniff/g) {
-			print "Error: ARPsniff already started for $listen_dev!\n\tOld pid file: $pid_dir/$listen_dev\n";
-			exit 1;
+	run_without_params;
+	while(1) {
+		my $res = waitpid($pid, WNOHANG);
+		sleep(10);
+		run_without_params;
+		if ($res == -1) {
+			logger("Some error occurred"), $? >> 8;
+			exit;
+		}
+		if ($res) {
+			logger("Child $res ended "), $? >> 8;
+			last;
 		}
 	}
 }
 
-print "Starting ARP listener $VERSION on $listen_dev with outgoing interface $out_dev:\n";
-
-# become daemon
-defined(my $pid=fork) or die "DIE: Cannot fork process: $! \n";
-exit if $pid;
-setsid or die "DIE: Unable to setsid: $!\n";
-# redirect standart file descriptors to /dev/null
-open(STDIN, '<', '/dev/null') or die("DIE: Cannot read stdin: $! \n");
-open(STDOUT, '>>', '/dev/null') or die("DIE: Cannot write to stdout: $! \n");
-open(STDERR, '>>', '/dev/null') or die("DIE: Cannot write to stderr: $! \n");
-
-open my $pid, '>', "/var/run/arpsniff/$listen_dev";
-print $pid $$;
-close $pid;
-
-
-# start sniffing
-Net::Pcap::loop($handle, -1, \&process_packet, '') || die "Unable to start sniffing";
-
-# close
-Net::Pcap::close($handle);
-
-sub process_packet {
-	my ($user, $header, $packet) = @_;
-	my $eth_data = NetPacket::Ethernet::strip($packet);
-	my $arp = NetPacket::ARP->decode($eth_data);
-
-	# convert hex number to IP dotted - from rob_au at perlmonks
-	my $spa = join '.', map { hex } ($arp->{'spa'} =~ /([[:xdigit:]]{2})/g);
-	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
-
-	if ($spa eq $tpa) {
-		print "Source: ",$spa,"($mac)\tDestination: ",$tpa, "(ff:ff:ff:ff:ff:ff)\n";
-		Net::ARP::send_packet($out_dev,			# Device
-                        $tpa,					# Source IP
-                        $tpa,					# Destination IP
-                        $mac,					# Source MAC
-                        'ff:ff:ff:ff:ff:ff',	# Destinaton MAC
-                        'reply');				# ARP operation
-	}
-}
+arpsniff_instance($listen_dev) if ($out_dev && $listen_dev);
