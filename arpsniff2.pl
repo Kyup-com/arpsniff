@@ -16,7 +16,6 @@ my @interfaces;
 my $perp_dir = '/etc/perp/arpsniff';
 my $default_if = `ip r l | awk '/default/ {print \$5}'`;
 my $rc_main = '/etc/perp/arpsniff/rc.main';
-my $main_service = '/etc/perp/arpsniff/rc.main-service';
 my $rc_log = '/etc/perp/arpsniff/rc.log';
 my $logfile = '/var/log/arpsniff.log';
 
@@ -117,10 +116,10 @@ if (not defined($ARGV[0]) or not defined($ARGV[1])) {
 		run_without_params;
 		if ($res == -1) {
 			logger("Some error occurred"), $? >> 8;
-			exit();
+			exit;
 		}
 		if ($res) {
-			logger("Child $res ended with "), $? >> 8;
+			logger("Child $res ended "), $? >> 8;
 			last;
 		}
 	}
