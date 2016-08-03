@@ -46,14 +46,6 @@ sub logger {
 	print CLOG strftime('%b %d %H:%M:%S', localtime(time)) . ' Arpsniff - ' . $_[0] . "\n";
 }
 
-sub verify_iface {
-	if ($_[0] =~ /^veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/) {
-		return 1;
-	} else {
-		return 0;
-	}
-}
-
 # Spawning child process for each container interface
 sub start_child {
 	my $ct_if = $_[0];
@@ -64,7 +56,7 @@ sub start_child {
 	$pid = fork;
 
 	#die "fork failed: $!" unless defined $pid;
-	if ($pid && $pid > 0) {
+	if (defined($pid) && $pid > 0) {
 		$running_ifs{$ct_if} = $pid;
 		return;
 	}
@@ -75,7 +67,7 @@ sub start_child {
 sub run_without_params {
 	@interfaces = `awk '/veth/ {gsub(":",""); print \$1}' /proc/net/dev`;
 	for my $vif (@interfaces) {
-		start_child($vif) if (verify_iface($vif));
+		start_child($vif) if ($vif =~ /^veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
 	}
 }
 
@@ -90,6 +82,7 @@ sub arpsniff_instance {
 	Net::Pcap::lookupnet(\$device, \my $netp, \my $maskp, \$errbuf) || die "Can't find network info";
 
 	# set filter on interface
+
 	Net::Pcap::compile($handle,\$fp, 'arp', 0, $maskp) && die "Unable to compile BPF";
 	Net::Pcap::setfilter($handle, $fp) && die "Unable to set filter";
 
@@ -126,12 +119,13 @@ $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
 $SIG{"TERM"} = \&sigTerm;
 
+die "No default route interface" if (!$default_if || $default_if !~ /^eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
+
 open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 # make the output to LOG and to STDOUT unbuffered
 # this has to be done after the fork and after detaching from the command terminal
 $|=1;
 select((select(CLOG), $| = 1)[0]);
-
 
 if (not defined($ARGV[0]) or not defined($ARGV[1])) {
 	run_without_params;
