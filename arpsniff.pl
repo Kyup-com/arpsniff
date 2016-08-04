@@ -9,13 +9,9 @@ use Data::Dumper;
 my $VERSION = "1.1";
 my $pid;
 my $errbuf;
-my $out_dev;
-my $listen_dev;
 my %running_ifs;
+my %pids;
 my @interfaces;
-my $perp_dir = '/etc/perp/arpsniff';
-my $rc_main = '/etc/perp/arpsniff/rc.main';
-my $rc_log = '/etc/perp/arpsniff/rc.log';
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
 
@@ -27,8 +23,8 @@ sub sigHup {
 
 sub sigChld {
 	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
-		my %rhash = reverse %running_ifs;
-		my $veth = $rhash{$pid};
+		my $veth = $pids{$pid};
+		delete $pids{$pid};
 		delete $running_ifs{$veth};
 		logger("$veth child ($pid) has been stopped.");
 		run_without_params;
@@ -54,9 +50,9 @@ sub start_child {
 	$ct_if =~ s/[\n\r]+//g;
 	next if ($running_ifs{$ct_if});
 	$pid = fork;
-
 	if (defined($pid) && $pid > 0) {
 		$running_ifs{$ct_if} = $pid;
+		$pids{$pid} = $ct_if;
 		return;
 	}
 	exec("$0 $out_if $ct_if");
@@ -64,10 +60,15 @@ sub start_child {
 }
 
 sub run_without_params {
-	@interfaces = `awk '/veth/ {gsub(":",""); print \$1}' /proc/net/dev`;
-	for my $vif (@interfaces) {
-		start_child($vif) if ($vif =~ /^veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
+	open my $fh, '<', '/proc/net/dev' or die "Can't open: $!\n";
+	while (my $interface = <$fh>) {
+		my @vif = split /:/, $interface;
+		if ($vif[0]  =~ /^veth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/) {
+			start_child($vif[0]);
+			logger("Starting process for $vif[0]");
+		}
 	}
+	close $fh;
 }
 
 sub arpsniff_instance {
@@ -111,8 +112,8 @@ sub process_packet {
 	}
 }
 
-$out_dev = $ARGV[0] if ($ARGV[0]);
-$listen_dev = $ARGV[1] if ($ARGV[1]);
+my $out_dev = $ARGV[0] if ($ARGV[0]);
+my $listen_dev = $ARGV[1] if ($ARGV[1]);
 
 $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
@@ -126,7 +127,7 @@ open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 $|=1;
 select((select(CLOG), $| = 1)[0]);
 
-if (not defined($ARGV[0]) or not defined($ARGV[1])) {
+if (not defined($out_dev) or not defined($listen_dev)) {
 	run_without_params;
 	while(1) {
 		my $res = waitpid($pid, WNOHANG);
