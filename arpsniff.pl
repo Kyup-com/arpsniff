@@ -24,8 +24,7 @@ sub sigHup {
 sub sigChld {
 	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
 		my $veth = $pids{$pid};
-		delete $pids{$pid};
-		delete $running_ifs{$veth};
+		delete $running_ifs{$pids{$pid}};
 		logger("$veth child ($pid) has been stopped.");
 		run_without_params;
 	}
@@ -142,6 +141,6 @@ if (not defined($out_dev) or not defined($listen_dev)) {
 			last;
 		}
 	}
+} else {
+	arpsniff_instance($listen_dev);
 }
-
-arpsniff_instance($listen_dev) if ($out_dev && $listen_dev);
