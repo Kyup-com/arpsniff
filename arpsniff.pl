@@ -92,7 +92,7 @@ sub arpsniff_instance {
 }
 
 sub process_packet {
-	my $mac = Net::ARP::get_mac($out_dev);
+	my $mac = Net::ARP::get_mac($ARGV[0]);
 	my ($user, $header, $packet) = @_;
 	my $eth_data = NetPacket::Ethernet::strip($packet);
 	my $arp = NetPacket::ARP->decode($eth_data);
@@ -101,7 +101,7 @@ sub process_packet {
 	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
 	if ($spa eq $tpa) {
 		logger("Source: $spa ($mac)\tDestination: $tpa (ff:ff:ff:ff:ff:ff)");
-		Net::ARP::send_packet($out_dev,			# Device
+		Net::ARP::send_packet($ARGV[0],			# Device
 			$tpa,					# Source IP
 			$tpa,					# Destination IP
 			$mac,					# Source MAC
@@ -109,9 +109,6 @@ sub process_packet {
 			'reply');				# ARP operation
 	}
 }
-
-my $out_dev = $ARGV[0] if ($ARGV[0]);
-my $listen_dev = $ARGV[1] if ($ARGV[1]);
 
 $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
@@ -125,7 +122,9 @@ open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 $|=1;
 select((select(CLOG), $| = 1)[0]);
 
-if (not defined($out_dev) or not defined($listen_dev)) {
+if (defined($ARGV[0]) and defined($ARGV[1])) {
+	arpsniff_instance($ARGV[1]) if ($ARGV[1] =! /^v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
+} else {
 	run_without_params;
 	while(1) {
 		my $res = waitpid($pid, WNOHANG);
@@ -140,6 +139,4 @@ if (not defined($out_dev) or not defined($listen_dev)) {
 			last;
 		}
 	}
-} else {
-	arpsniff_instance($listen_dev);
 }
