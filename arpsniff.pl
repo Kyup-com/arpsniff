@@ -142,6 +142,5 @@ if (defined($ARGV[1])) {
 	while(1) {
 		run_without_params;
 		sleep(10);
-		}
+	}
 }
-
