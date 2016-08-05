@@ -5,7 +5,7 @@ use NetPacket::ARP;
 use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
-my $VERSION = "1.2";
+my $VERSION = "1.3";
 my %running_ifs;
 my %pids;
 my @interfaces;
@@ -35,7 +35,7 @@ sub sigTerm {
 }
 
 sub logger {
-	print $CLOG strftime('%b %d %H:%M:%S', localtime(time)) . ' Arpsniff - ' . $_[0] . "\n";
+	print $CLOG strftime('%b %d %H:%M:%S', localtime(time)) . $_[0] . "\n";
 }
 
 # Spawning child process for each container interface
