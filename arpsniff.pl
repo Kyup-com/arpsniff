@@ -11,6 +11,7 @@ my $errbuf;
 my %running_ifs;
 my %pids;
 my @interfaces;
+our $out_dev;
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
 
@@ -92,7 +93,7 @@ sub arpsniff_instance {
 }
 
 sub process_packet {
-	my $mac = Net::ARP::get_mac($ARGV[0]);
+	my $mac = Net::ARP::get_mac($out_dev);
 	my ($user, $header, $packet) = @_;
 	my $eth_data = NetPacket::Ethernet::strip($packet);
 	my $arp = NetPacket::ARP->decode($eth_data);
@@ -100,7 +101,7 @@ sub process_packet {
 	my $spa = join '.', map { hex } ($arp->{'spa'} =~ /([[:xdigit:]]{2})/g);
 	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
 	if ($spa eq $tpa) {
-		Net::ARP::send_packet($ARGV[0],			# Device
+		Net::ARP::send_packet($out_dev,			# Device
 			$tpa,					# Source IP
 			$tpa,					# Destination IP
 			$mac,					# Source MAC
@@ -112,6 +113,8 @@ sub process_packet {
 $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
 $SIG{"TERM"} = \&sigTerm;
+
+$out_dev = $ARGV[0] if ($ARGV[0]);
 
 die "No default route interface" if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
 
