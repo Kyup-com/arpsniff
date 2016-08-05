@@ -13,7 +13,6 @@ my @interfaces;
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
 our $out_dev;
-our $pid;
 
 sub sigHup {
 	logger("SIGHUP received");
@@ -21,7 +20,7 @@ sub sigHup {
 }
 
 sub sigChld {
-	while ( (my local $pid = waitpid(-1, WNOHANG)) > 0 ) {
+	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
 		my $veth = $pids{$pid};
 		delete $running_ifs{$pids{$pid}};
 		logger("$veth child ($pid) has been stopped.");
@@ -131,18 +130,9 @@ if (defined($ARGV[0]) and defined($ARGV[1])) {
 		arpsniff_instance($ARGV[1]);
 	}
 } else {
-	run_without_params;
 	while(1) {
-		my $res = waitpid($pid, WNOHANG);
-		sleep(10);
 		run_without_params;
-		if ($res == -1) {
-			logger("Some error occurred"), $? >> 8;
-			exit;
+		sleep(10);
 		}
-		if ($res) {
-			logger("Child $res ended "), $? >> 8;
-			last;
-		}
-	}
 }
+
