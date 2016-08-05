@@ -6,7 +6,6 @@ use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
 my $VERSION = "1.1";
-my $pid;
 my $errbuf;
 my %running_ifs;
 my %pids;
@@ -14,6 +13,7 @@ my @interfaces;
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
 our $out_dev;
+our $pid;
 
 sub sigHup {
 	logger("SIGHUP received");
@@ -21,7 +21,7 @@ sub sigHup {
 }
 
 sub sigChld {
-	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
+	while ( (my local $pid = waitpid(-1, WNOHANG)) > 0 ) {
 		my $veth = $pids{$pid};
 		delete $running_ifs{$pids{$pid}};
 		logger("$veth child ($pid) has been stopped.");
