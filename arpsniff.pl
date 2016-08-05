@@ -5,7 +5,7 @@ use NetPacket::ARP;
 use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
-my $VERSION = "1.1";
+my $VERSION = "1.2";
 my %running_ifs;
 my %pids;
 my @interfaces;
