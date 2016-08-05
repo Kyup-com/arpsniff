@@ -126,9 +126,8 @@ if (defined($ARGV[0]) and defined($ARGV[1])) {
 	if ($ARGV[1] !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
 		logger("No matching default route interface found");
 		exit;
-	} else {
-		arpsniff_instance($ARGV[1]);
 	}
+	arpsniff_instance($ARGV[1]);
 } else {
 	while(1) {
 		run_without_params;
