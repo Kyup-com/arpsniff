@@ -4,7 +4,6 @@ use NetPacket::Ethernet;
 use NetPacket::ARP;
 use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
-use Data::Dumper;
 
 my $VERSION = "1.1";
 my $pid;
