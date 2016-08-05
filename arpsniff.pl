@@ -100,7 +100,6 @@ sub process_packet {
 	my $spa = join '.', map { hex } ($arp->{'spa'} =~ /([[:xdigit:]]{2})/g);
 	my $tpa = join '.', map { hex } ($arp->{'tpa'} =~ /([[:xdigit:]]{2})/g);
 	if ($spa eq $tpa) {
-		logger("Source: $spa ($mac)\tDestination: $tpa (ff:ff:ff:ff:ff:ff)");
 		Net::ARP::send_packet($ARGV[0],			# Device
 			$tpa,					# Source IP
 			$tpa,					# Destination IP
