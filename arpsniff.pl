@@ -11,10 +11,9 @@ my $errbuf;
 my %running_ifs;
 my %pids;
 my @interfaces;
-our $out_dev;
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
-
+our $out_dev;
 
 sub sigHup {
 	logger("SIGHUP received");
