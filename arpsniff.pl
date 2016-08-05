@@ -114,7 +114,8 @@ $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
 $SIG{"TERM"} = \&sigTerm;
 
-die "No default route interface" if (!$default_if || $default_if !~ /^eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
+print $default_if."\n";
+die "No default route interface" if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
 
 open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 # make the output to LOG and to STDOUT unbuffered
@@ -123,7 +124,7 @@ $|=1;
 select((select(CLOG), $| = 1)[0]);
 
 if (defined($ARGV[0]) and defined($ARGV[1])) {
-	arpsniff_instance($ARGV[1]) if ($ARGV[1] =! /^v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)?$/);
+	arpsniff_instance($ARGV[1]) if ($ARGV[1] =~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
 } else {
 	run_without_params;
 	while(1) {
