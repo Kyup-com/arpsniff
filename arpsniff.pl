@@ -10,7 +10,7 @@ my %running_ifs;
 my %pids;
 my @interfaces;
 my $logfile = '/var/log/arpsniff.log';
-our $default_if = `ip r l | awk '/default/ {print \$5}'`;
+our $default_if;
 our $out_dev;
 our $CLOG;
 
@@ -112,20 +112,30 @@ $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
 $SIG{"TERM"} = \&sigTerm;
 
-$out_dev = $ARGV[0] if ($ARGV[0]);
-
-die "No default route interface" if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
-
 open $CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 # make the output to LOG and to STDOUT unbuffered
 # this has to be done after the fork and after detaching from the command terminal
 $|=1;
 select((select($CLOG), $| = 1)[0]);
 
-if (defined($ARGV[0]) and defined($ARGV[1])) {
+$default_if = `ip r l | awk '/default/ {print \$5}'`;
+if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
+	logger("Error: unable to find default interface or invalid interface name '$default_if'");
+	exit 1
+}
+
+if ($ARGV[0] !~ /^v?eth[0-9]+(\.[0-9]+)?$/) {
+	logger("Error: invalid outgoing interface supplied: $ARGV[0]");
+	exit 2
+}
+
+$out_dev = $ARGV[0];
+
+
+if (defined($ARGV[1])) {
 	if ($ARGV[1] !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
-		logger("No matching default route interface found");
-		exit;
+		logger("Error: No matching default route interface found");
+		exit 3;
 	}
 	arpsniff_instance($ARGV[1]);
 } else {
