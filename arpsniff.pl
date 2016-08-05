@@ -29,7 +29,6 @@ sub sigChld {
 }
 
 sub sigTerm {
-	my $veth =~ s/[\n\r]//g;
 	foreach(keys %running_ifs) {
 		kill 9, $running_ifs{$_};
 	}
