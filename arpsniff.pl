@@ -114,7 +114,6 @@ $SIG{"HUP"} = \&sigHup;
 $SIG{"CHLD"} = \&sigChld;
 $SIG{"TERM"} = \&sigTerm;
 
-print $default_if."\n";
 die "No default route interface" if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
 
 open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
