@@ -30,7 +30,7 @@ sub sigChld {
 
 sub sigTerm {
 	foreach(keys %running_ifs) {
-		kill 9, $running_ifs{$_};
+		kill 'TERM', $running_ifs{$_};
 	}
 }
 
