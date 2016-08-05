@@ -12,6 +12,7 @@ my @interfaces;
 my $logfile = '/var/log/arpsniff.log';
 our $default_if = `ip r l | awk '/default/ {print \$5}'`;
 our $out_dev;
+our $CLOG;
 
 sub sigHup {
 	logger("SIGHUP received");
@@ -34,7 +35,7 @@ sub sigTerm {
 }
 
 sub logger {
-	print CLOG strftime('%b %d %H:%M:%S', localtime(time)) . ' Arpsniff - ' . $_[0] . "\n";
+	print $CLOG strftime('%b %d %H:%M:%S', localtime(time)) . ' Arpsniff - ' . $_[0] . "\n";
 }
 
 # Spawning child process for each container interface
@@ -115,11 +116,11 @@ $out_dev = $ARGV[0] if ($ARGV[0]);
 
 die "No default route interface" if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
 
-open CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
+open $CLOG, '>>', $logfile or die "Unable to open logfile $logfile: $!\n";
 # make the output to LOG and to STDOUT unbuffered
 # this has to be done after the fork and after detaching from the command terminal
 $|=1;
-select((select(CLOG), $| = 1)[0]);
+select((select($CLOG), $| = 1)[0]);
 
 if (defined($ARGV[0]) and defined($ARGV[1])) {
 	if ($ARGV[1] !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
