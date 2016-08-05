@@ -124,7 +124,12 @@ $|=1;
 select((select(CLOG), $| = 1)[0]);
 
 if (defined($ARGV[0]) and defined($ARGV[1])) {
-	arpsniff_instance($ARGV[1]) if ($ARGV[1] =~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/);
+	if ($ARGV[1] =~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
+		arpsniff_instance($ARGV[1]);
+	}else{
+		logger("No matching default route interface found");
+		exit;
+	}
 } else {
 	run_without_params;
 	while(1) {
