@@ -6,7 +6,6 @@ use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
 my $VERSION = "1.1";
-my $errbuf;
 my %running_ifs;
 my %pids;
 my @interfaces;
@@ -69,6 +68,7 @@ sub run_without_params {
 
 sub arpsniff_instance {
 	my $device = $_[0];
+	my $errbuf;
 	# open device
 	my $handle = Net::Pcap::open_live($device, 2000, 1, 0, \$errbuf);
 
