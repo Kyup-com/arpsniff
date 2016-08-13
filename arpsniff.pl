@@ -5,7 +5,7 @@ use NetPacket::ARP;
 use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
-my $VERSION = "1.3";
+my $VERSION = "1.4";
 my %running_ifs;
 my %pids;
 my @interfaces;
@@ -23,8 +23,8 @@ sub sigChld {
 	while ( (my $pid = waitpid(-1, WNOHANG)) > 0 ) {
 		my $veth = $pids{$pid};
 		delete $running_ifs{$pids{$pid}};
+		delete $pids{$pid};
 		logger("$veth child ($pid) has been stopped.");
-		run_without_params;
 	}
 }
 
