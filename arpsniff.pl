@@ -34,8 +34,11 @@ sub sigChld {
 
 sub sigTerm {
 	foreach(keys %running_ifs) {
-		kill 'TERM', $running_ifs{$_};
+		logger("Killing child $running_ifs{$_}");
+		kill 'KILL', $running_ifs{$_};
 	}
+	logger("Exiting main thread");
+	exit;
 }
 
 sub logger {
