@@ -1,4 +1,8 @@
 #!/usr/bin/perl
+
+use strict;
+use warnings;
+
 use Net::Pcap;
 use NetPacket::Ethernet;
 use NetPacket::ARP;
