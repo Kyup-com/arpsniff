@@ -42,6 +42,9 @@ sub logger {
 sub start_child {
 	my $ct_if = $_[0];
 	my $out_if = $default_if;
+
+	$out_if = $out_dev if defined $out_dev;
+
 	$out_if =~ s/[\n\r]+//g;
 	$ct_if =~ s/[\n\r]+//g;
 	next if ($running_ifs{$ct_if});
