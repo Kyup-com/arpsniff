@@ -119,7 +119,7 @@ $|=1;
 select((select($CLOG), $| = 1)[0]);
 
 $default_if = `ip r l | awk '/default/ {print \$5}'`;
-if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
+if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+((.[0-9]+|:[0-9]+)|ovsbr)?)?$/) {
 	logger("Error: unable to find default interface or invalid interface name '$default_if'");
 	exit 1
 }
