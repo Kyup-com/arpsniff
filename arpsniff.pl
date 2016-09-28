@@ -1,4 +1,8 @@
 #!/usr/bin/perl
+
+use strict;
+use warnings;
+
 use Net::Pcap;
 use NetPacket::Ethernet;
 use NetPacket::ARP;
@@ -30,8 +34,11 @@ sub sigChld {
 
 sub sigTerm {
 	foreach(keys %running_ifs) {
-		kill 'TERM', $running_ifs{$_};
+		logger("Killing child $running_ifs{$_}");
+		kill 'KILL', $running_ifs{$_};
 	}
+	logger("Exiting main thread");
+	exit;
 }
 
 sub logger {
@@ -42,6 +49,9 @@ sub logger {
 sub start_child {
 	my $ct_if = $_[0];
 	my $out_if = $default_if;
+
+	$out_if = $out_dev if defined $out_dev;
+
 	$out_if =~ s/[\n\r]+//g;
 	$ct_if =~ s/[\n\r]+//g;
 	next if ($running_ifs{$ct_if});
@@ -119,7 +129,7 @@ $|=1;
 select((select($CLOG), $| = 1)[0]);
 
 $default_if = `ip r l | awk '/default/ {print \$5}'`;
-if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+(.[0-9]+|:[0-9]+)|ovsbr)?$/) {
+if (!$default_if || $default_if !~ /^(v?eth(c[0-9]+)?[0-9]+((.[0-9]+|:[0-9]+)|ovsbr)?)?$/) {
 	logger("Error: unable to find default interface or invalid interface name '$default_if'");
 	exit 1
 }
