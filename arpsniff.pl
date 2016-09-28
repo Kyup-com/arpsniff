@@ -9,7 +9,7 @@ use NetPacket::ARP;
 use Net::ARP;
 use POSIX qw(strftime :sys_wait_h);
 
-my $VERSION = "1.4";
+my $VERSION = "1.5";
 my %running_ifs;
 my %pids;
 my @interfaces;
@@ -17,6 +17,7 @@ my $logfile = '/var/log/arpsniff.log';
 our $default_if;
 our $out_dev;
 our $CLOG;
+our $my_pid = $$;
 
 sub sigHup {
 	logger("SIGHUP received");
@@ -33,11 +34,14 @@ sub sigChld {
 }
 
 sub sigTerm {
-	foreach(keys %running_ifs) {
-		logger("Killing child $running_ifs{$_}");
-		kill 'KILL', $running_ifs{$_};
+	if ($_ == $my_pid) {
+		foreach(keys %running_ifs) {
+			kill 'TERM', $running_ifs{$_};
+		}
+		logger("parent process received SIGTERM, exiting.");
+	} else {
+		logger("Child $_ received SIGTERM, stopping.");
 	}
-	logger("Exiting main thread");
 	exit;
 }
 
